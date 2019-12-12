@@ -1,0 +1,14 @@
+[
+  {
+    "name": "owner one",
+    "email": "one@abc.com"
+  },
+  {
+    "name": "owner two",
+    "email": "two@abc.com"
+  },
+  {
+    "name": "owner three",
+    "email": "three@abc.com"
+  }
+]
