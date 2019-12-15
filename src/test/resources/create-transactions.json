@@ -1,0 +1,40 @@
+{
+  "accounts": [
+    {
+      "name": "owner one",
+      "email": "one@abc.com"
+    },
+    {
+      "name": "owner two",
+      "email": "two@abc.com"
+    },
+    {
+      "name": "owner three",
+      "email": "three@abc.com"
+    }
+  ],
+  "transactions" : [
+    {
+      "senderMailAddress" : "one@abc.com",
+      "transaction" : {
+        "transactionType" : "DEPOSIT",
+        "amount" : 100
+      }
+    },
+    {
+      "senderMailAddress" : "two@abc.com",
+      "transaction" : {
+        "transactionType" : "DEPOSIT",
+        "amount" : 100
+      }
+    },
+    {
+      "senderMailAddress" : "one@abc.com",
+      "receiverMailAddress" : "two@abc.com",
+      "transaction" : {
+        "transactionType" : "TRANSFER",
+        "amount" : 50
+      }
+    }
+  ]
+}

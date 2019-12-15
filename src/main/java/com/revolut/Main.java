@@ -2,30 +2,47 @@ package com.revolut;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.revolut.converter.AccountConverter;
-import com.revolut.dto.AccountDto;
 import com.revolut.model.Account;
+import com.revolut.model.Transaction;
 import com.revolut.repository.AccountRepository;
+import com.revolut.repository.TransactionRepository;
+import spark.Request;
 
 import java.io.ByteArrayInputStream;
 import java.util.List;
 
-import static spark.Spark.*;
+import static spark.Spark.get;
+import static spark.Spark.post;
 
 public class Main {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final AccountRepository accountRepository = new AccountRepository();
+    private static final TransactionRepository transactionRepository = new TransactionRepository();
+    private static final TransactionProcessor processor = new TransactionProcessor(accountRepository,transactionRepository);
+
     public static void main(String[] args) {
-        AccountConverter accountConverter = new AccountConverter();
-        AccountRepository accountRepository = new AccountRepository();
-        ObjectMapper objectMapper = new ObjectMapper();
+        TypeReference<List<Account>> accountListType = new TypeReference<List<Account>>(){};
+        TypeReference<List<Transaction>> transactionListType = new TypeReference<List<Transaction>>(){};
+
         post("/account/create", (req, res) -> {
-            List<AccountDto> accountDtos = objectMapper.readValue(new ByteArrayInputStream(req.bodyAsBytes()),new TypeReference<List<AccountDto>>(){});
-            List<Account> accounts = accountConverter.toEntity(accountDtos);
+            List<Account> accounts = convertPayload(req,accountListType);
             List<Account> created = accountRepository.create(accounts);
-            return objectMapper.writeValueAsString(accountConverter.toDto(created));
+            return objectMapper.writeValueAsString(created);
         });
         get("/account/all",(req,res) -> {
            List<Account> allAccounts = accountRepository.all();
-           return objectMapper.writeValueAsString(accountConverter.toDto(allAccounts));
+           return objectMapper.writeValueAsString(allAccounts);
         });
+        post("/transaction/new", (req,res) -> {
+            List<Transaction> transactions = convertPayload(req,transactionListType);
+            List<String> transactionNumbers = transactionRepository.addTransactions(transactions);
+            return objectMapper.writeValueAsString(transactionNumbers);
+        });
+        processor.start();
+    }
+
+    private static <T> T convertPayload(Request req, TypeReference<T> type) throws java.io.IOException {
+        return objectMapper.readValue(new ByteArrayInputStream(req.bodyAsBytes()),type);
     }
 }
