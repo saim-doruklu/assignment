@@ -68,12 +68,13 @@ public class MainTest {
         Object fileJson = readFile("create-transactions.json",false);
 
 
-        List<Map<String, Object>> initialAccounts = getAccountsFromJson((Map<String, Object>) fileJson);
+        Map<String, Object> fileJsonAsMap = (Map<String, Object>) fileJson;
+        List<Map<String, Object>> initialAccounts = (List<Map<String, Object>>) (fileJsonAsMap.get("accounts"));
         List<Account> accountsCreated = createAccounts(initialAccounts);
         List<String> accountNumbers = toAccountNumbers(accountsCreated);
         BigDecimal initialTotalBalance = accountsCreated.stream().map(Account::getBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<Transaction> transactions = createTransactionsFromJson((Map<String, Object>) fileJson, accountsCreated);
+        List<Transaction> transactions = createTransactionsFromJson((List<Map<String, Object>>) (fileJsonAsMap.get("transactions")), accountsCreated);
         createTransactions(transactions);
         BigDecimal balanceSumInFile = allAccountsTotalBalance(transactions);
 
@@ -193,8 +194,7 @@ public class MainTest {
         account.setName("test");
         account.setEmail("test");
         List<Account> created = createAccounts(Arrays.asList(account));
-        Account createdAccount = created.get(0);
-        String accountNumber = createdAccount.getAccountNumber();
+        String accountNumber = created.get(0).getAccountNumber();
 
         Transaction withdrawal = new Transaction();
         withdrawal.setAmount(BigDecimal.valueOf(100000));
@@ -254,8 +254,7 @@ public class MainTest {
         return balanceSumInFile;
     }
 
-    private List<Transaction> createTransactionsFromJson(Map<String, Object> json, List<Account> accounts) throws IOException {
-        List<Map<String, Object>> transactionsInfoList = (List<Map<String, Object>>) (json.get("transactions"));
+    private List<Transaction> createTransactionsFromJson(List<Map<String, Object>> transactionsInfoList, List<Account> accounts) throws IOException {
         List<Transaction> transactions = new ArrayList<>();
         for(Map<String, Object> transactionInfo : transactionsInfoList){
             String sender = (String)transactionInfo.get("senderMailAddress");
@@ -268,10 +267,6 @@ public class MainTest {
             transactions.add(transaction);
         }
         return transactions;
-    }
-
-    private List<Map<String, Object>> getAccountsFromJson(Map<String, Object> json) {
-        return (List<Map<String, Object>>) (json.get("accounts"));
     }
 
     private <T> T sendRequestAndGetResponse(String url, Object body, BiFunction<String,Object,HttpUriRequest> requestCreator, TypeReference<T> returnType) throws IOException {
