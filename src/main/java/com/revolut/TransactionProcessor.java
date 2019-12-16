@@ -51,6 +51,7 @@ public class TransactionProcessor {
                     TransactionStatus status = processTransaction(nextTransaction, accountsForTransaction);
                     if(status == TransactionStatus.REJECTED){
                         transactionRepository.finishTransaction(nextTransaction,false, true);
+                        itemsProcessed++;
                     } else if(status == TransactionStatus.POSTPONED){
                         transactionRepository.finishTransaction(nextTransaction,false, false);
                     } else{
@@ -75,7 +76,7 @@ public class TransactionProcessor {
 
     private TransactionStatus processTransaction(Transaction nextTransaction,List<String> accountsToGet) {
         if (!accountsExist(accountsToGet)){
-            System.out.printf("Some accounts in list %s  don't exist, rejecting transaction %s",accountsToGet,nextTransaction.getId());
+            System.out.printf("Some accounts in list %s  don't exist, rejecting transaction %s\n",accountsToGet,nextTransaction.getId());
             return TransactionStatus.REJECTED;
         }
 
@@ -85,7 +86,7 @@ public class TransactionProcessor {
     private TransactionStatus processWithExistingAccounts(Transaction nextTransaction, List<String> accountsToGet) {
         Map<String, Account> accounts = accountRepository.getAccounts(accountsToGet, true);
         if(accounts.isEmpty()){
-            System.out.printf("Some accounts could not be locked from %s, postponing transaction %s",accountsToGet,nextTransaction.getId());
+            System.out.printf("Some accounts could not be locked from %s, postponing transaction %s\n",accountsToGet,nextTransaction.getId());
             return TransactionStatus.POSTPONED;
         }
 
@@ -97,7 +98,7 @@ public class TransactionProcessor {
     private TransactionStatus processWithLockedAccounts(Transaction nextTransaction, Map<String, Account> accounts) {
         boolean isSuccess = tryTransaction(nextTransaction,accounts);
         if(!isSuccess){
-            System.out.printf("Some constraints are not met, rejecting transaction %s",nextTransaction.getId());
+            System.out.printf("Some constraints are not met, rejecting transaction %s\n",nextTransaction.getId());
             return TransactionStatus.REJECTED;
         }
 

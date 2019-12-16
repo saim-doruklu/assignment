@@ -97,7 +97,7 @@ public class AccountRepository {
             }
         }
         for(Map.Entry<Account, Account> accountPair : foundAccounts.entrySet()){
-            System.out.printf("Updating account %s by thread %s", accountPair.getKey().getAccountNumber(), threadName);
+            System.out.printf("Updating account %s by thread %s\n", accountPair.getKey().getAccountNumber(), threadName);
             Account account = accountPair.getKey();
             Account actualAccount = accountPair.getValue();
             actualAccount.copyFrom(account);

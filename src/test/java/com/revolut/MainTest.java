@@ -22,18 +22,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 public class MainTest {
 
-    private static final String GET_ACCOUNTS_URL = "http://localhost:4567/account/all";
+    private static final String GET_ALL_ACCOUNTS_URL = "http://localhost:4567/account/all";
+    private static final String GET_ACCOUNTS_URL = "http://localhost:4567/account/get";
     private static final String CREATE_ACCOUNTS_URL = "http://localhost:4567/account/create";
     private static final String CREATE_TRANSACTION_URL = "http://localhost:4567/transaction/new";
     private static final TypeReference<List<Account>> accountListType = new TypeReference<List<Account>>() {};
+    private static final TypeReference<Map<String,Account>> accountMapType = new TypeReference<Map<String,Account>>() {};
     private static final TypeReference<Transaction> transactionType = new TypeReference<Transaction>() {};
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -45,68 +45,163 @@ public class MainTest {
     @Test
     public void testCreateNewAccount() throws IOException {
 
-        List<Account> initialAccounts = sendRequestAndGetResponse(GET_ACCOUNTS_URL, null, this::createGet, accountListType);
+        List<Account> initialAccounts = getAllAccounts();
         int initialAccountsSize = initialAccounts.size();
 
         Object raw = readFile("create-accounts.json", true);
         int numAccountsToCreate = convert(raw, accountListType).size();
 
-
-        sendRequestAndGetResponse(CREATE_ACCOUNTS_URL,raw,this::createPost,null);
-
-        List<Account> createdAccounts = sendRequestAndGetResponse(GET_ACCOUNTS_URL, null, this::createGet, accountListType);
+        createAccounts(raw);
+        List<Account> createdAccounts = getAllAccounts();
         int createdAccountsSize = createdAccounts.size();
-        Assert.assertEquals(0, initialAccountsSize);
-        Assert.assertEquals(numAccountsToCreate, createdAccountsSize);
+
+        Assert.assertEquals(initialAccountsSize+numAccountsToCreate, createdAccountsSize);
     }
 
     @Test
     public void testCreateNewTransaction() throws IOException, InterruptedException {
         Object fileJson = readFile("create-transactions.json",false);
 
-        List<Account> initialAccounts = createAccounts((Map<String, Object>) fileJson);
-        List<Transaction> transactions = createTransactions((Map<String, Object>) fileJson, initialAccounts);
+
+        List<Map<String, Object>> initialAccounts = getAccountsFromJson((Map<String, Object>) fileJson);
+        List<Account> accountsCreated = createAccounts(initialAccounts);
+        List<String> accountNumbers = accountsCreated.stream().map(Account::getAccountNumber).collect(Collectors.toList());
+        BigDecimal initialTotalBalance = accountsCreated.stream().map(Account::getBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<Transaction> transactions = createTransactionsFromJson((Map<String, Object>) fileJson, accountsCreated);
+        createTransactions(transactions);
         BigDecimal balanceSumInFile = allAccountsTotalBalance(transactions);
 
         Thread.sleep(2000);
 
-        List<Account> accounts = sendRequestAndGetResponse(GET_ACCOUNTS_URL, null, this::createGet, accountListType);
-        BigDecimal initialTotalBalance = totalBalance(initialAccounts);
-        BigDecimal balanceSumAfterTransactions = totalBalance(accounts);
+        Map<String,Account> accounts = getAccounts(accountNumbers);
+        BigDecimal balanceSumAfterTransactions = accounts.values().stream().map(Account::getBalance).reduce(BigDecimal.ZERO,BigDecimal::add);
 
         Assert.assertEquals(BigDecimal.ZERO,initialTotalBalance);
         Assert.assertEquals(balanceSumInFile,balanceSumAfterTransactions);
     }
-
     @Test
-    public void testRandomTransactions() throws IOException {
+    public void testRandomTransactions() throws IOException, InterruptedException {
+
+        int numTransactions = 1000;
+        int numAccounts = 100;
+        long sleepTime = 5000;
+        BigDecimal depositAmount = BigDecimal.valueOf(10000000);
+
         Random random = new Random();
         List<Account> accountsToCreate = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < numAccounts; i++) {
             Account account = new Account();
             account.setEmail("email"+i+"@.com");
             account.setName("name "+i);
             accountsToCreate.add(account);
         }
-        List<Account> accounts = sendRequestAndGetResponse(CREATE_ACCOUNTS_URL, accountsToCreate, this::createPost, accountListType);
+        List<Account> accounts = createAccounts(accountsToCreate);
+        List<Transaction> deposits = new ArrayList<>();
+        for (int i = 0; i < numAccounts; i++) {
+            Transaction deposit = new Transaction();
+            deposit.setAmount(depositAmount);
+            deposit.setSender(accounts.get(i).getAccountNumber());
+            deposit.setTransactionType(TransactionType.DEPOSIT);
+            deposits.add(deposit);
+        }
+        createTransactions(deposits);
 
-        for (int i = 0; i < 1000; i++) {
+
+        Thread.sleep(sleepTime);
+        List<String> accountNumbers = accounts.stream().map(Account::getAccountNumber).collect(Collectors.toList());
+        Map<String,Account> accountsAfterDeposit = getAccounts(accountNumbers);
+        for (int i = 0; i < numAccounts; i++) {
+            String accountNumber = accountNumbers.get(i);
+            Account account = accountsAfterDeposit.get(accountNumber);
+            System.out.printf("Account balance after deposit %s for account %s", account.getBalance(), account.getAccountNumber());
+            Assert.assertEquals(depositAmount,account.getBalance());
+        }
+
+        List<Transaction> randomTransactions = new ArrayList<>();
+        for (int i = 0; i < numTransactions; i++) {
             int randomTransactionType = random.nextInt(3);
             TransactionType type;
+            String sender = accountNumbers.get(random.nextInt(numAccounts));
+            String receiver =null;
             if(randomTransactionType == 0){
                 type = TransactionType.DEPOSIT;
             }else if(randomTransactionType == 1){
                 type = TransactionType.WITHDRAWAL;
             }else{
                 type = TransactionType.TRANSFER;
+                receiver = accountNumbers.get(random.nextInt(numAccounts));
+                while(sender.equals(receiver)){
+                    receiver = accountNumbers.get(random.nextInt(numAccounts));
+                }
             }
 
+            BigDecimal amount = BigDecimal.valueOf(random.nextInt(100)+1);
+            Transaction transaction = new Transaction();
+            transaction.setSender(sender);
+            transaction.setReceiver(receiver);
+            transaction.setTransactionType(type);
+            transaction.setAmount(amount);
+            randomTransactions.add(transaction);
+        }
+
+        for (int i = 0; i < numTransactions; i++) {
+            Transaction transaction = randomTransactions.get(i);
+            String sender = transaction.getSender();
+            Account senderAccount = accountsAfterDeposit.get(sender);
+            BigDecimal amount = transaction.getAmount();
+
+            if(transaction.getTransactionType() == TransactionType.DEPOSIT){
+                senderAccount.setBalance(senderAccount.getBalance().add(amount));
+            } else if(transaction.getTransactionType() == TransactionType.WITHDRAWAL){
+                senderAccount.setBalance(senderAccount.getBalance().subtract(amount));
+            } else {
+                String receiver = transaction.getReceiver();
+                Account receiverAccount = accountsAfterDeposit.get(receiver);
+                senderAccount.setBalance(senderAccount.getBalance().subtract(amount));
+                receiverAccount.setBalance(receiverAccount.getBalance().add(amount));
+            }
+        }
+
+        for (int i = 0; i < numTransactions; i++) {
+            Transaction transaction = randomTransactions.get(i);
+            createTransactions(Arrays.asList(transaction));
+        }
+
+        Thread.sleep(sleepTime);
+
+        Map<String,Account> accountsAfterTransactions = getAccounts(accountNumbers);
+        for(Map.Entry<String, Account> entry : accountsAfterTransactions.entrySet()){
+            String accountNumber = entry.getKey();
+            Account account = entry.getValue();
+            Assert.assertEquals(accountsAfterDeposit.get(accountNumber).getBalance(),account.getBalance());
         }
     }
 
-    private BigDecimal totalBalance(List<Account> initialAccounts) {
-        return initialAccounts.stream().map(Account::getBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
+    @Test
+    public void testInvalidWithDrawal(){
+        Account account = new Account();
+        account.setName("test");
+        account.setEmail("test");
+
     }
+
+    private Map<String, Account> getAccounts(List<String> accountNumbers) throws IOException {
+        return sendRequestAndGetResponse(GET_ACCOUNTS_URL, accountNumbers, this::createPost, accountMapType);
+    }
+
+    private void createTransactions(List<Transaction> transactions) throws IOException {
+        sendRequestAndGetResponse(CREATE_TRANSACTION_URL,transactions,this::createPost,null);
+    }
+
+    private List<Account> getAllAccounts() throws IOException {
+        return sendRequestAndGetResponse(GET_ALL_ACCOUNTS_URL, null, this::createGet, accountListType);
+    }
+
+    private List<Account> createAccounts(Object accountsToCreate) throws IOException {
+        return sendRequestAndGetResponse(CREATE_ACCOUNTS_URL, accountsToCreate, this::createPost, accountListType);
+    }
+
 
     private BigDecimal allAccountsTotalBalance(List<Transaction> transactions) {
         BigDecimal balanceSumInFile = BigDecimal.ZERO;
@@ -120,7 +215,7 @@ public class MainTest {
         return balanceSumInFile;
     }
 
-    private List<Transaction> createTransactions(Map<String, Object> json, List<Account> accounts) throws IOException {
+    private List<Transaction> createTransactionsFromJson(Map<String, Object> json, List<Account> accounts) throws IOException {
         List<Map<String, Object>> transactionsInfoList = (List<Map<String, Object>>) (json.get("transactions"));
         List<Transaction> transactions = new ArrayList<>();
         for(Map<String, Object> transactionInfo : transactionsInfoList){
@@ -133,13 +228,11 @@ public class MainTest {
             transaction.setReceiver(receiverAccountNo);
             transactions.add(transaction);
         }
-        sendRequestAndGetResponse(CREATE_TRANSACTION_URL,transactions,this::createPost,null);
         return transactions;
     }
 
-    private List<Account> createAccounts(Map<String, Object> json) throws IOException {
-        List<Map<String, Object>> accountsList = (List<Map<String, Object>>) (json.get("accounts"));
-        return sendRequestAndGetResponse(CREATE_ACCOUNTS_URL, accountsList, this::createPost, accountListType);
+    private List<Map<String, Object>> getAccountsFromJson(Map<String, Object> json) {
+        return (List<Map<String, Object>>) (json.get("accounts"));
     }
 
     private <T> T sendRequestAndGetResponse(String url, Object body, BiFunction<String,Object,HttpUriRequest> requestCreator, TypeReference<T> returnType) throws IOException {
