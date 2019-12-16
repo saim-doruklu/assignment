@@ -14,6 +14,17 @@ public class AccountRepository {
 
         private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
 
+        private LockedAccount(){
+            this.setAccountNumber(generateId());
+            this.setBalance(BigDecimal.ZERO);
+        }
+
+        private LockedAccount(Account account){
+            this();
+            this.copyFrom(account);
+            this.setBalance(BigDecimal.ZERO);
+        }
+
         private Account copy(){
             Account clone = new Account();
             clone.setBalance(getBalance());
@@ -39,10 +50,7 @@ public class AccountRepository {
     public List<Account> create(List<Account> accounts) {
         List<Account> created = new ArrayList<>();
         for(Account original : accounts){
-            LockedAccount lockedAccount = new LockedAccount();
-            lockedAccount.copyFrom(original);
-            lockedAccount.setAccountNumber(generateId());
-            lockedAccount.setBalance(BigDecimal.ZERO);
+            LockedAccount lockedAccount = new LockedAccount(original);
             accountNumberAccount.put(lockedAccount.getAccountNumber(),lockedAccount);
             created.add(lockedAccount.copy());
         }

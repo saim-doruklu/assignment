@@ -20,12 +20,15 @@ public class TransactionRepository {
 
         private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
 
+        private LockedTransaction(){
+            setId(generateTransactionId());
+        }
 
-        public AtomicBoolean getIsBeingUpdated() {
+        private AtomicBoolean getIsBeingUpdated() {
             return isBeingUpdated;
         }
 
-        public Transaction copy(){
+        private Transaction copy(){
             Transaction copy = new Transaction();
             copy.setId(getId());
             copy.setReceiver(getReceiver());
@@ -35,7 +38,7 @@ public class TransactionRepository {
             return copy;
         }
 
-        public void copyFrom(Transaction transaction){
+        private void copyFrom(Transaction transaction){
             this.setTransactionType(transaction.getTransactionType());
             this.setAmount(transaction.getAmount());
             this.setSender(transaction.getSender());
@@ -46,11 +49,9 @@ public class TransactionRepository {
     public List<String> addTransactions(List<Transaction> transactions) {
         List<String> transactionIds = new ArrayList<>();
         for(Transaction transaction : transactions){
-            String transactionId = generateTransactionId();
             LockedTransaction lockedTransaction = new LockedTransaction();
             lockedTransaction.copyFrom(transaction);
-            lockedTransaction.setId(transactionId);
-            transactionIds.add(transactionId);
+            transactionIds.add(lockedTransaction.getId());
             addWaitingTransaction(lockedTransaction);
         }
         return transactionIds;
