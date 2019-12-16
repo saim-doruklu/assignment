@@ -1,6 +1,7 @@
 package com.revolut.repository;
 
 import com.revolut.model.Transaction;
+import com.revolut.model.TransactionStatus;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +26,6 @@ public class TransactionRepository {
         return transactionIds;
     }
 
-
     public Transaction getNextTransaction(){
         Transaction transaction = getWaitingTransaction();
         if(transaction != null && lockTransaction(transaction)) {
@@ -33,14 +33,6 @@ public class TransactionRepository {
         }else{
             return null;
         }
-    }
-
-    public Transaction getWaitingTransaction(String transactionId){
-        return waitingTransactionsById.get(transactionId).copy();
-    }
-
-    public Transaction getFinishedTransaction(String transactionId){
-        return finishedTransactionsById.get(transactionId).copy();
     }
 
     public boolean finishTransaction(Transaction transaction, boolean isFinished, boolean isRejected){
@@ -104,5 +96,19 @@ public class TransactionRepository {
 
     private String generateTransactionId(){
         return UUID.randomUUID().toString();
+    }
+
+    public Map<String, TransactionStatus> getTransactionStatuses(List<String> transactionNumbers) {
+        Map<String,TransactionStatus> statusMap = new HashMap<>();
+        for(String transactionNumber : transactionNumbers){
+            if(this.waitingTransactionsById.containsKey(transactionNumber)){
+                statusMap.put(transactionNumber, TransactionStatus.POSTPONED);
+            } else if(this.finishedTransactionsById.containsKey(transactionNumber)){
+                statusMap.put(transactionNumber,TransactionStatus.FINISHED);
+            } else if(this.rejectedTransactions.containsKey(transactionNumber)){
+                statusMap.put(transactionNumber,TransactionStatus.REJECTED);
+            }
+        }
+        return statusMap;
     }
 }

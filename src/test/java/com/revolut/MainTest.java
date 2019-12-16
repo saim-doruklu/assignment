@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.revolut.model.Account;
 import com.revolut.model.Transaction;
+import com.revolut.model.TransactionStatus;
 import com.revolut.model.TransactionType;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
@@ -32,10 +33,14 @@ public class MainTest {
     private static final String GET_ACCOUNTS_URL = "http://localhost:4567/account/get";
     private static final String CREATE_ACCOUNTS_URL = "http://localhost:4567/account/create";
     private static final String CREATE_TRANSACTION_URL = "http://localhost:4567/transaction/new";
+    private static final String GET_TRANSACTION_URL = "http://localhost:4567/transaction/get";
+
     private static final TypeReference<List<Account>> accountListType = new TypeReference<List<Account>>() {};
+    private static final TypeReference<Map<String, TransactionStatus>> transactionStatusMapType = new TypeReference<Map<String, TransactionStatus>>() {};
     private static final TypeReference<Map<String,Account>> accountMapType = new TypeReference<Map<String,Account>>() {};
     private static final TypeReference<Transaction> transactionType = new TypeReference<Transaction>() {};
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private static final TypeReference<List<String>> stringListType = new TypeReference<List<String>>() {};
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeClass
     public static void init(){
@@ -65,7 +70,7 @@ public class MainTest {
 
         List<Map<String, Object>> initialAccounts = getAccountsFromJson((Map<String, Object>) fileJson);
         List<Account> accountsCreated = createAccounts(initialAccounts);
-        List<String> accountNumbers = accountsCreated.stream().map(Account::getAccountNumber).collect(Collectors.toList());
+        List<String> accountNumbers = toAccountNumbers(accountsCreated);
         BigDecimal initialTotalBalance = accountsCreated.stream().map(Account::getBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<Transaction> transactions = createTransactionsFromJson((Map<String, Object>) fileJson, accountsCreated);
@@ -80,6 +85,11 @@ public class MainTest {
         Assert.assertEquals(BigDecimal.ZERO,initialTotalBalance);
         Assert.assertEquals(balanceSumInFile,balanceSumAfterTransactions);
     }
+
+    private List<String> toAccountNumbers(List<Account> accountsCreated) {
+        return accountsCreated.stream().map(Account::getAccountNumber).collect(Collectors.toList());
+    }
+
     @Test
     public void testRandomTransactions() throws IOException, InterruptedException {
 
@@ -97,6 +107,7 @@ public class MainTest {
             accountsToCreate.add(account);
         }
         List<Account> accounts = createAccounts(accountsToCreate);
+        List<String> accountNumbers = toAccountNumbers(accounts);
         List<Transaction> deposits = new ArrayList<>();
         for (int i = 0; i < numAccounts; i++) {
             Transaction deposit = new Transaction();
@@ -107,9 +118,7 @@ public class MainTest {
         }
         createTransactions(deposits);
 
-
         Thread.sleep(sleepTime);
-        List<String> accountNumbers = accounts.stream().map(Account::getAccountNumber).collect(Collectors.toList());
         Map<String,Account> accountsAfterDeposit = getAccounts(accountNumbers);
         for (int i = 0; i < numAccounts; i++) {
             String accountNumber = accountNumbers.get(i);
@@ -179,19 +188,49 @@ public class MainTest {
     }
 
     @Test
-    public void testInvalidWithDrawal(){
+    public void testTransactionStatuses() throws IOException, InterruptedException {
         Account account = new Account();
         account.setName("test");
         account.setEmail("test");
+        List<Account> created = createAccounts(Arrays.asList(account));
+        Account createdAccount = created.get(0);
+        String accountNumber = createdAccount.getAccountNumber();
 
+        Transaction withdrawal = new Transaction();
+        withdrawal.setAmount(BigDecimal.valueOf(100000));
+        withdrawal.setSender(accountNumber);
+        withdrawal.setTransactionType(TransactionType.WITHDRAWAL);
+        testTransactionStatus(withdrawal,BigDecimal.ZERO,TransactionStatus.REJECTED);
+
+        Transaction deposit = new Transaction();
+        deposit.setAmount(BigDecimal.TEN);
+        deposit.setSender(accountNumber);
+        deposit.setTransactionType(TransactionType.DEPOSIT);
+
+        testTransactionStatus(deposit,BigDecimal.TEN,TransactionStatus.FINISHED);
+    }
+
+    private void testTransactionStatus(Transaction transaction, BigDecimal balance, TransactionStatus status) throws IOException, InterruptedException {
+        List<String> transactions = createTransactions(Arrays.asList(transaction));
+
+        Thread.sleep(50);
+
+        Map<String, Account> accounts = getAccounts(Arrays.asList(transaction.getSender()));
+        Map<String, TransactionStatus> transactionStatus = getTransactionStatus(Arrays.asList(transactions.get(0)));
+        Assert.assertEquals(balance,accounts.get(transaction.getSender()).getBalance());
+        Assert.assertEquals(status,transactionStatus.get(transactions.get(0)));
+    }
+
+    private Map<String, TransactionStatus> getTransactionStatus(List<String> transactions) throws IOException {
+        return sendRequestAndGetResponse(GET_TRANSACTION_URL,transactions,this::createPost,transactionStatusMapType);
     }
 
     private Map<String, Account> getAccounts(List<String> accountNumbers) throws IOException {
         return sendRequestAndGetResponse(GET_ACCOUNTS_URL, accountNumbers, this::createPost, accountMapType);
     }
 
-    private void createTransactions(List<Transaction> transactions) throws IOException {
-        sendRequestAndGetResponse(CREATE_TRANSACTION_URL,transactions,this::createPost,null);
+    private List<String> createTransactions(List<Transaction> transactions) throws IOException {
+        return sendRequestAndGetResponse(CREATE_TRANSACTION_URL,transactions,this::createPost,stringListType);
     }
 
     private List<Account> getAllAccounts() throws IOException {

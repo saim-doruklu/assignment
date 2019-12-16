@@ -2,6 +2,7 @@ package com.revolut;
 
 import com.revolut.model.Account;
 import com.revolut.model.Transaction;
+import com.revolut.model.TransactionStatus;
 import com.revolut.model.TransactionType;
 import com.revolut.repository.AccountRepository;
 import com.revolut.repository.TransactionRepository;
@@ -20,10 +21,6 @@ public class TransactionProcessor {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private ScheduledExecutorService processor = Executors.newScheduledThreadPool(coreSize);
-
-    private enum TransactionStatus{
-        FINISHED,REJECTED,POSTPONED;
-    }
 
     public TransactionProcessor(AccountRepository accountRepository, TransactionRepository transactionRepository) {
         this.accountRepository = accountRepository;

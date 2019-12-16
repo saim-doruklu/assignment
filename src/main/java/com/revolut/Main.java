@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.revolut.model.Account;
 import com.revolut.model.Transaction;
+import com.revolut.model.TransactionStatus;
 import com.revolut.repository.AccountRepository;
 import com.revolut.repository.TransactionRepository;
 import spark.Request;
@@ -45,6 +46,11 @@ public class Main {
             List<Transaction> transactions = convertPayload(req,transactionListType);
             List<String> transactionNumbers = transactionRepository.addTransactions(transactions);
             return objectMapper.writeValueAsString(transactionNumbers);
+        });
+        post("/transaction/get", (req,res) -> {
+            List<String> transactionNumbers = convertPayload(req,stringListType);
+            Map<String, TransactionStatus> transactions = transactionRepository.getTransactionStatuses(transactionNumbers);
+            return objectMapper.writeValueAsString(transactions);
         });
         processor.start();
     }
