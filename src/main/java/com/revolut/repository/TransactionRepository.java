@@ -6,28 +6,58 @@ import com.revolut.model.TransactionStatus;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedTransferQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TransactionRepository {
     private AtomicInteger waitingTransactionsSize = new AtomicInteger(0);
-    private LinkedTransferQueue<Transaction> waitingTransactions = new LinkedTransferQueue<>();
-    private Map<String,Transaction> waitingTransactionsById = new ConcurrentHashMap<>();
-    private Map<String,Transaction> finishedTransactionsById = new ConcurrentHashMap<>();
-    private Map<String,Transaction> rejectedTransactions = new ConcurrentHashMap<>();
+    private LinkedTransferQueue<LockedTransaction> waitingTransactions = new LinkedTransferQueue<>();
+    private Map<String,LockedTransaction> waitingTransactionsById = new ConcurrentHashMap<>();
+    private Map<String,LockedTransaction> finishedTransactionsById = new ConcurrentHashMap<>();
+    private Map<String,LockedTransaction> rejectedTransactions = new ConcurrentHashMap<>();
+
+    private class LockedTransaction extends Transaction{
+
+        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
+
+
+        public AtomicBoolean getIsBeingUpdated() {
+            return isBeingUpdated;
+        }
+
+        public Transaction copy(){
+            Transaction copy = new Transaction();
+            copy.setId(getId());
+            copy.setReceiver(getReceiver());
+            copy.setSender(getSender());
+            copy.setAmount(getAmount());
+            copy.setTransactionType(getTransactionType());
+            return copy;
+        }
+
+        public void copyFrom(Transaction transaction){
+            this.setTransactionType(transaction.getTransactionType());
+            this.setAmount(transaction.getAmount());
+            this.setSender(transaction.getSender());
+            this.setReceiver(transaction.getReceiver());
+        }
+    }
 
     public List<String> addTransactions(List<Transaction> transactions) {
         List<String> transactionIds = new ArrayList<>();
         for(Transaction transaction : transactions){
             String transactionId = generateTransactionId();
-            transaction.setId(transactionId);
+            LockedTransaction lockedTransaction = new LockedTransaction();
+            lockedTransaction.copyFrom(transaction);
+            lockedTransaction.setId(transactionId);
             transactionIds.add(transactionId);
-            addWaitingTransaction(transaction);
+            addWaitingTransaction(lockedTransaction);
         }
         return transactionIds;
     }
 
     public Transaction getNextTransaction(){
-        Transaction transaction = getWaitingTransaction();
+        LockedTransaction transaction = getWaitingTransaction();
         if(transaction != null && lockTransaction(transaction)) {
             return transaction.copy();
         }else{
@@ -37,7 +67,7 @@ public class TransactionRepository {
 
     public boolean finishTransaction(Transaction transaction, boolean isFinished, boolean isRejected){
         String threadName = Thread.currentThread().getName();
-        Transaction actualTransaction = waitingTransactionsById.get(transaction.getId());
+        LockedTransaction actualTransaction = waitingTransactionsById.get(transaction.getId());
         if(isLocked(actualTransaction)){
             if(isFinished || isRejected) {
                 System.out.printf("Finishing transaction %s rejection status = %s by thread %s\n", transaction.getId(), isRejected,threadName);
@@ -54,7 +84,7 @@ public class TransactionRepository {
         }
     }
 
-    private void updateMapsForFinishedTransaction(Transaction transaction,boolean isRejected) {
+    private void updateMapsForFinishedTransaction(LockedTransaction transaction,boolean isRejected) {
         waitingTransactionsById.remove(transaction.getId());
         if(isRejected) {
             rejectedTransactions.put(transaction.getId(),transaction);
@@ -63,15 +93,15 @@ public class TransactionRepository {
         }
     }
 
-    private void addWaitingTransaction(Transaction transaction){
+    private void addWaitingTransaction(LockedTransaction transaction){
         waitingTransactionsById.put(transaction.getId(),transaction);
         waitingTransactions.add(transaction);
         waitingTransactionsSize.incrementAndGet();
     }
 
 
-    private Transaction getWaitingTransaction(){
-        Transaction transaction = waitingTransactions.poll();
+    private LockedTransaction getWaitingTransaction(){
+        LockedTransaction transaction = waitingTransactions.poll();
         if(transaction != null) {
             waitingTransactionsSize.decrementAndGet();
         }
@@ -82,15 +112,15 @@ public class TransactionRepository {
         return waitingTransactionsSize.get();
     }
 
-    private boolean lockTransaction(Transaction transaction){
+    private boolean lockTransaction(LockedTransaction transaction){
         return transaction.getIsBeingUpdated().compareAndSet(false,true);
     }
 
-    private boolean unlockTransaction(Transaction transaction){
+    private boolean unlockTransaction(LockedTransaction transaction){
         return transaction.getIsBeingUpdated().compareAndSet(true,false);
     }
 
-    private boolean isLocked(Transaction transaction){
+    private boolean isLocked(LockedTransaction transaction){
         return transaction.getIsBeingUpdated().get();
     }
 

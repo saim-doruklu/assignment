@@ -1,14 +1,9 @@
 package com.revolut.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import java.math.BigDecimal;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Account{
 
-    @JsonIgnore
-    private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
 
     private BigDecimal balance;
     private String accountNumber;
@@ -47,22 +42,4 @@ public class Account{
         this.email = email;
     }
 
-    public AtomicBoolean getIsBeingUpdated() {
-        return isBeingUpdated;
-    }
-
-    public Account copy(){
-        Account clone = new Account();
-        clone.setBalance(this.balance);
-        clone.setAccountNumber(this.accountNumber);
-        clone.setName(this.name);
-        clone.setEmail(this.email);
-        return clone;
-    }
-
-    public void copyFrom(Account account) {
-        this.balance = account.balance;
-        this.name = account.name;
-        this.email = account.email;
-    }
 }

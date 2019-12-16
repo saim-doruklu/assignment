@@ -5,18 +5,46 @@ import com.revolut.model.Account;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class AccountRepository {
-    Map<String,Account> accountNumberAccount = new ConcurrentHashMap<>();
+
+    private class LockedAccount extends Account{
+
+        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
+
+        private Account copy(){
+            Account clone = new Account();
+            clone.setBalance(getBalance());
+            clone.setAccountNumber(getAccountNumber());
+            clone.setName(getName());
+            clone.setEmail(getEmail());
+            return clone;
+        }
+
+        private void copyFrom(Account account) {
+            this.setBalance(account.getBalance());
+            this.setName(account.getName());
+            this.setEmail(account.getEmail());
+        }
+
+        private AtomicBoolean getIsBeingUpdated() {
+            return isBeingUpdated;
+        }
+    }
+
+    Map<String,LockedAccount> accountNumberAccount = new ConcurrentHashMap<>();
 
     public List<Account> create(List<Account> accounts) {
         List<Account> created = new ArrayList<>();
         for(Account original : accounts){
-            original.setAccountNumber(generateId());
-            original.setBalance(BigDecimal.ZERO);
-            accountNumberAccount.put(original.getAccountNumber(),original);
-            created.add(original.copy());
+            LockedAccount lockedAccount = new LockedAccount();
+            lockedAccount.copyFrom(original);
+            lockedAccount.setAccountNumber(generateId());
+            lockedAccount.setBalance(BigDecimal.ZERO);
+            accountNumberAccount.put(lockedAccount.getAccountNumber(),lockedAccount);
+            created.add(lockedAccount.copy());
         }
         return created;
     }
@@ -26,7 +54,7 @@ public class AccountRepository {
     }
 
     public List<Account> all() {
-        return accountNumberAccount.values().stream().map(Account::copy).collect(Collectors.toList());
+        return accountNumberAccount.values().stream().map(LockedAccount::copy).collect(Collectors.toList());
     }
 
     public Map<String,Account> getAccounts(List<String> accounts, boolean lock){
@@ -43,13 +71,13 @@ public class AccountRepository {
         String threadName = Thread.currentThread().getName();
 
         Map<String,Account> foundAccounts = new HashMap<>();
-        List<Account> lockedAccounts = new ArrayList<>();
+        List<LockedAccount> lockedAccounts = new ArrayList<>();
 
         Collections.sort(accounts);
 
         boolean allSuccessful = true;
         for(String accountNumber : accounts){
-            Account actualAccount = accountNumberAccount.get(accountNumber);
+            LockedAccount actualAccount = accountNumberAccount.get(accountNumber);
             if(actualAccount != null && lockAccount(actualAccount)){
                 System.out.printf("Getting account %s with lock by thread %s\n", accountNumber, threadName);
                 foundAccounts.put(accountNumber,actualAccount.copy());
@@ -62,7 +90,7 @@ public class AccountRepository {
         }
 
         if (!allSuccessful) {
-            for (Account lockedAccount : lockedAccounts) {
+            for (LockedAccount lockedAccount : lockedAccounts) {
                 unlockAccount(lockedAccount);
             }
             return new HashMap<>();
@@ -74,7 +102,7 @@ public class AccountRepository {
         String threadName = Thread.currentThread().getName();
         Map<String,Account> foundAccounts = new HashMap<>();
         for(String accountNumber : accounts) {
-            Account actualAccount = accountNumberAccount.get(accountNumber);
+            LockedAccount actualAccount = accountNumberAccount.get(accountNumber);
             if(actualAccount != null) {
                 System.out.printf("Getting account %s without lock by thread %s\n", accountNumber, threadName);
                 foundAccounts.put(accountNumber, actualAccount.copy());
@@ -86,9 +114,9 @@ public class AccountRepository {
     public boolean updateAccounts(List<Account> accounts){
         String threadName = Thread.currentThread().getName();
 
-        Map<Account,Account> foundAccounts = new HashMap<>();
+        Map<Account,LockedAccount> foundAccounts = new HashMap<>();
         for(Account account : accounts){
-            Account actualAccount = accountNumberAccount.get(account.getAccountNumber());
+            LockedAccount actualAccount = accountNumberAccount.get(account.getAccountNumber());
             if(actualAccount != null && isLocked(actualAccount)){
                 foundAccounts.put(account,actualAccount);
             } else{
@@ -96,10 +124,10 @@ public class AccountRepository {
                 return false;
             }
         }
-        for(Map.Entry<Account, Account> accountPair : foundAccounts.entrySet()){
+        for(Map.Entry<Account, LockedAccount> accountPair : foundAccounts.entrySet()){
             System.out.printf("Updating account %s by thread %s\n", accountPair.getKey().getAccountNumber(), threadName);
             Account account = accountPair.getKey();
-            Account actualAccount = accountPair.getValue();
+            LockedAccount actualAccount = accountPair.getValue();
             actualAccount.copyFrom(account);
         }
         return true;
@@ -107,20 +135,20 @@ public class AccountRepository {
 
     public void unlockAccounts(List<Account> accounts){
         for(Account account : accounts){
-            Account actualAccount = accountNumberAccount.get(account.getAccountNumber());
+            LockedAccount actualAccount = accountNumberAccount.get(account.getAccountNumber());
             unlockAccount(actualAccount);
         }
     }
 
-    private boolean lockAccount(Account account){
+    private boolean lockAccount(LockedAccount account){
         return account.getIsBeingUpdated().compareAndSet(false,true);
     }
 
-    private boolean unlockAccount(Account account){
+    private boolean unlockAccount(LockedAccount account){
         return account.getIsBeingUpdated().compareAndSet(true,false);
     }
 
-    private boolean isLocked(Account account){
+    private boolean isLocked(LockedAccount account){
         return account.getIsBeingUpdated().get();
     }
 }
