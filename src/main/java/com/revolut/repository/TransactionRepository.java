@@ -16,36 +16,6 @@ public class TransactionRepository {
     private Map<String,LockedTransaction> finishedTransactionsById = new ConcurrentHashMap<>();
     private Map<String,LockedTransaction> rejectedTransactions = new ConcurrentHashMap<>();
 
-    private class LockedTransaction extends Transaction{
-
-        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
-
-        private LockedTransaction(){
-            setId(generateTransactionId());
-        }
-
-        private AtomicBoolean getIsBeingUpdated() {
-            return isBeingUpdated;
-        }
-
-        private Transaction copy(){
-            Transaction copy = new Transaction();
-            copy.setId(getId());
-            copy.setReceiver(getReceiver());
-            copy.setSender(getSender());
-            copy.setAmount(getAmount());
-            copy.setTransactionType(getTransactionType());
-            return copy;
-        }
-
-        private void copyFrom(Transaction transaction){
-            this.setTransactionType(transaction.getTransactionType());
-            this.setAmount(transaction.getAmount());
-            this.setSender(transaction.getSender());
-            this.setReceiver(transaction.getReceiver());
-        }
-    }
-
     public List<String> addTransactions(List<Transaction> transactions) {
         List<String> transactionIds = new ArrayList<>();
         for(Transaction transaction : transactions){
@@ -125,10 +95,6 @@ public class TransactionRepository {
         return transaction.getIsBeingUpdated().get();
     }
 
-    private String generateTransactionId(){
-        return UUID.randomUUID().toString();
-    }
-
     public Map<String, TransactionStatus> getTransactionStatuses(List<String> transactionNumbers) {
         Map<String,TransactionStatus> statusMap = new HashMap<>();
         for(String transactionNumber : transactionNumbers){
@@ -141,5 +107,35 @@ public class TransactionRepository {
             }
         }
         return statusMap;
+    }
+
+    private class LockedTransaction extends Transaction{
+
+        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
+
+        private LockedTransaction(){
+            setId(UUID.randomUUID().toString());
+        }
+
+        private AtomicBoolean getIsBeingUpdated() {
+            return isBeingUpdated;
+        }
+
+        private Transaction copy(){
+            Transaction copy = new Transaction();
+            copy.setId(getId());
+            copy.setReceiver(getReceiver());
+            copy.setSender(getSender());
+            copy.setAmount(getAmount());
+            copy.setTransactionType(getTransactionType());
+            return copy;
+        }
+
+        private void copyFrom(Transaction transaction){
+            this.setTransactionType(transaction.getTransactionType());
+            this.setAmount(transaction.getAmount());
+            this.setSender(transaction.getSender());
+            this.setReceiver(transaction.getReceiver());
+        }
     }
 }

@@ -10,42 +10,7 @@ import java.util.stream.Collectors;
 
 public class AccountRepository {
 
-    private class LockedAccount extends Account{
-
-        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
-
-        private LockedAccount(){
-            this.setAccountNumber(generateId());
-            this.setBalance(BigDecimal.ZERO);
-        }
-
-        private LockedAccount(Account account){
-            this();
-            this.copyFrom(account);
-            this.setBalance(BigDecimal.ZERO);
-        }
-
-        private Account copy(){
-            Account clone = new Account();
-            clone.setBalance(getBalance());
-            clone.setAccountNumber(getAccountNumber());
-            clone.setName(getName());
-            clone.setEmail(getEmail());
-            return clone;
-        }
-
-        private void copyFrom(Account account) {
-            this.setBalance(account.getBalance());
-            this.setName(account.getName());
-            this.setEmail(account.getEmail());
-        }
-
-        private AtomicBoolean getIsBeingUpdated() {
-            return isBeingUpdated;
-        }
-    }
-
-    Map<String,LockedAccount> accountNumberAccount = new ConcurrentHashMap<>();
+    private Map<String,LockedAccount> accountNumberAccount = new ConcurrentHashMap<>();
 
     public List<Account> create(List<Account> accounts) {
         List<Account> created = new ArrayList<>();
@@ -55,10 +20,6 @@ public class AccountRepository {
             created.add(lockedAccount.copy());
         }
         return created;
-    }
-
-    private String generateId(){
-        return UUID.randomUUID().toString();
     }
 
     public List<Account> all() {
@@ -159,4 +120,41 @@ public class AccountRepository {
     private boolean isLocked(LockedAccount account){
         return account.getIsBeingUpdated().get();
     }
+
+
+    private class LockedAccount extends Account{
+
+        private AtomicBoolean isBeingUpdated = new AtomicBoolean(false);
+
+        private LockedAccount(){
+            this.setAccountNumber(UUID.randomUUID().toString());
+            this.setBalance(BigDecimal.ZERO);
+        }
+
+        private LockedAccount(Account account){
+            this();
+            this.copyFrom(account);
+            this.setBalance(BigDecimal.ZERO);
+        }
+
+        private Account copy(){
+            Account clone = new Account();
+            clone.setBalance(getBalance());
+            clone.setAccountNumber(getAccountNumber());
+            clone.setName(getName());
+            clone.setEmail(getEmail());
+            return clone;
+        }
+
+        private void copyFrom(Account account) {
+            this.setBalance(account.getBalance());
+            this.setName(account.getName());
+            this.setEmail(account.getEmail());
+        }
+
+        private AtomicBoolean getIsBeingUpdated() {
+            return isBeingUpdated;
+        }
+    }
+
 }
